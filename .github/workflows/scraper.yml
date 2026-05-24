@@ -1,0 +1,59 @@
+name: Farmers Atelier Scraper
+
+on:
+  schedule:
+    # Every Thursday at 6:00 AM UTC
+    - cron: '0 6 * * 4'
+  workflow_dispatch:
+    inputs:
+      max_products:
+        description: 'Max products to process (leave empty for all)'
+        required: false
+        type: string
+
+concurrency:
+  group: scraper
+  cancel-in-progress: true
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache Hugging Face models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: huggingface-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            huggingface-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libgl1-mesa-glx libglib2.0-0
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.max_products }}" ]; then
+            ARGS="--max-products ${{ inputs.max_products }}"
+          fi
+          python scraper.py $ARGS
